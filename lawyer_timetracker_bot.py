@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ТОКЕН БОТА - ЗАМЕНИТЕ на свой токен от @BotFather
-BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+BOT_TOKEN = "ТОКЕН ТУТ"
 
 # ПРОВЕРКА ПОДПИСКИ НА КАНАЛ
 CHANNEL_USERNAME = "@moskvichca"  # Замените на username вашего канала (например: @technology_for_lawyers)
@@ -207,6 +207,54 @@ def get_projects_by_client(user_id: int) -> Dict:
         projects_dict[client_name].append((project_name, rate))
 
     return projects_dict
+
+def get_client_by_id(user_id: int, client_id: int) -> Optional[Tuple]:
+    """Получить данные клиента по ID"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT name FROM clients WHERE id = ? AND user_id = ?', (client_id, user_id))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+
+def delete_client(user_id: int, client_id: int) -> bool:
+    """Удаляет клиента и все его проекты"""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM clients WHERE id = ? AND user_id = ?', (client_id, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при удалении клиента: {e}")
+        return False
+
+
+def get_project_by_id(user_id: int, project_id: int) -> Optional[Tuple]:
+    """Получить данные проекта по ID"""
+    conn = sqlite3.connect(DB_NAME)
+    cursor = conn.cursor()
+    cursor.execute('SELECT name, hourly_rate FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+
+def delete_project(user_id: int, project_id: int) -> bool:
+    """Удаляет проект"""
+    try:
+        conn = sqlite3.connect(DB_NAME)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM projects WHERE id = ? AND user_id = ?', (project_id, user_id))
+        conn.commit()
+        conn.close()
+        return True
+    except Exception as e:
+        logger.error(f"Ошибка при удалении проекта: {e}")
+        return False
+
 
 
 def start_work(user_id: int, project_id: int, task_type: str, description: str = None) -> bool:
@@ -422,11 +470,15 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = """
 👋 *Добро пожаловать в бот учёта рабочего времени!*
 
+*Если еще не подписан на наш ТГ, подпишись: @techforlaw*
+
 📋 *Управление клиентами и проектами:*
 /add\\_client — добавить клиента
 /add\\_project — добавить проект
 /clients — список клиентов
 /projects — список проектов
+/delete\\_client — удалить клиента 
+/delete\\_project — удалить проект 
 
 ⏱ *Учёт времени:*
 /work — начать работу
@@ -445,6 +497,8 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /cancel — отменить текущую операцию
 
 Начните с добавления клиента командой /add\\_client!
+
+После добавления клиента - добавьте проект 
 """
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
@@ -813,6 +867,101 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+
+
+async def delete_client_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса удаления клиента"""
+    user_id = update.effective_user.id
+    clients = get_user_clients(user_id)
+
+    if not clients:
+        await update.message.reply_text("❌ У вас нет клиентов для удаления.")
+        return ConversationHandler.END
+
+    keyboard = []
+    for client_id, client_name, _ in clients:
+        keyboard.append([InlineKeyboardButton(
+            f"🗑 {client_name}", 
+            callback_data=f"del_client_{client_id}"
+        )])
+    keyboard.append([InlineKeyboardButton("❌ Отменить", callback_data="cancel_delete")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "⚠️ Выберите клиента для удаления (все его проекты тоже будут удалены):",
+        reply_markup=reply_markup
+    )
+    return ConversationHandler.END
+
+
+async def delete_client_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение удаления клиента"""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    client_id = int(query.data.split('_')[2])
+
+    client_data = get_client_by_id(user_id, client_id)
+    if not client_data:
+        await query.edit_message_text("❌ Клиент не найден.")
+        return
+
+    if delete_client(user_id, client_id):
+        await query.edit_message_text(f"✅ Клиент удалён!")
+    else:
+        await query.edit_message_text("❌ Ошибка при удалении.")
+
+
+async def delete_project_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало процесса удаления проекта"""
+    user_id = update.effective_user.id
+    projects = get_user_projects(user_id)
+
+    if not projects:
+        await update.message.reply_text("❌ У вас нет проектов для удаления.")
+        return ConversationHandler.END
+
+    keyboard = []
+    for project_id, project_name, _, client_name in projects:
+        button_text = f"🗑 {client_name} → {project_name}"
+        keyboard.append([InlineKeyboardButton(button_text, callback_data=f"del_project_{project_id}")])
+    keyboard.append([InlineKeyboardButton("❌ Отменить", callback_data="cancel_delete")])
+
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    await update.message.reply_text(
+        "⚠️ Выберите проект для удаления:",
+        reply_markup=reply_markup
+    )
+    return ConversationHandler.END
+
+
+async def delete_project_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Подтверждение удаления проекта"""
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    project_id = int(query.data.split('_')[2])
+
+    project_data = get_project_by_id(user_id, project_id)
+    if not project_data:
+        await query.edit_message_text("❌ Проект не найден.")
+        return
+
+    if delete_project(user_id, project_id):
+        await query.edit_message_text(f"✅ Проект удалён!")
+    else:
+        await query.edit_message_text("❌ Ошибка при удалении.")
+
+
+async def cancel_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена удаления"""
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text("❌ Отменено.")
+
+
 def main():
     init_db()
 
@@ -859,6 +1008,25 @@ def main():
     application.add_handler(CommandHandler('month', report_month))
     application.add_handler(CommandHandler('summary', report_summary))
     application.add_handler(CommandHandler('export', report_export))
+
+    # Добавляем обработчики удаления
+    delete_client_handler = ConversationHandler(
+        entry_points=[CommandHandler('delete_client', delete_client_start)],
+        states={},
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    delete_project_handler = ConversationHandler(
+        entry_points=[CommandHandler('delete_project', delete_project_start)],
+        states={},
+        fallbacks=[CommandHandler('cancel', cancel)],
+    )
+
+    application.add_handler(delete_client_handler)
+    application.add_handler(delete_project_handler)
+    application.add_handler(CallbackQueryHandler(delete_client_confirm, pattern='^del_client_'))
+    application.add_handler(CallbackQueryHandler(delete_project_confirm, pattern='^del_project_'))
+    application.add_handler(CallbackQueryHandler(cancel_delete, pattern='^cancel_delete$'))
 
     logger.info("Бот запущен!")
     application.run_polling(allowed_updates=Update.ALL_TYPES)
