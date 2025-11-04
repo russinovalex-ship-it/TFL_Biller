@@ -1,0 +1,39 @@
+# БЫСТРЫЙ СТАРТ - Команды для копирования
+
+## Установка (Windows)
+pip install -r requirements.txt
+
+## Установка (Linux/macOS)
+pip3 install -r requirements.txt
+
+## Запуск (Windows)
+python lawyer_timetracker_bot.py
+
+## Запуск (Linux/macOS)
+python3 lawyer_timetracker_bot.py
+
+## Запуск в фоновом режиме на сервере (Linux)
+screen -S lawyer_bot
+python3 lawyer_timetracker_bot.py
+# Нажмите Ctrl+A, затем D для отключения
+
+## Вернуться к боту
+screen -r lawyer_bot
+
+## Остановка бота
+Ctrl + C
+
+## Создание резервной копии БД (Windows)
+copy lawyer_timetracker.db backup_%date:~-4,4%%date:~-7,2%%date:~-10,2%.db
+
+## Создание резервной копии БД (Linux/macOS)
+cp lawyer_timetracker.db backup_$(date +%Y%m%d).db
+
+## Проверка версии Python
+python --version
+
+## Проверка установленных пакетов
+pip list
+
+## Обновление библиотек
+pip install --upgrade python-telegram-bot pandas openpyxl
