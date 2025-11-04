@@ -31,7 +31,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # ТОКЕН БОТА - ЗАМЕНИТЕ на свой токен от @BotFather
-BOT_TOKEN = "8487057723:AAFpUPtcI80ilT6-m2QKyjQSiq2aqYu2q8I"
+BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
 
 # ПРОВЕРКА ПОДПИСКИ НА КАНАЛ
 CHANNEL_USERNAME = "@moskvichca"  # Замените на username вашего канала (например: @technology_for_lawyers)
